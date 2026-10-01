@@ -95,6 +95,25 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   res.json({ id: user.id, username: user.username, role: user.role });
 });
 
+// ── POST /api/admin/seed (admin-only: bulk seed sites from JSON) ──────────────
+app.post('/api/admin/seed', authenticate, adminOnly, (req, res) => {
+  const { sites } = req.body;
+  if (!Array.isArray(sites)) return res.status(400).json({ error: 'sites must be an array' });
+  const cleaned = sites.map(s => ({
+    siteId: String(s.siteId || '').trim(),
+    siteName: String(s.siteName || '').trim(),
+    towercoId: String(s.towercoId || '').replace(/\.0$/, '').trim(),
+  })).filter(s => s.towercoId);
+  writeJSON(P.sites, cleaned);
+  res.json({ ok: true, count: cleaned.length });
+});
+
+// ── GET /api/sites/count ──────────────────────────────────────────────────────
+app.get('/api/sites/count', (req, res) => {
+  const sites = readJSON(P.sites);
+  res.json({ count: sites.length });
+});
+
 // ── GET /api/sites/lookup/:towercoId ──────────────────────────────────────────
 app.get('/api/sites/lookup/:towercoId', authenticate, (req, res) => {
   const id = String(req.params.towercoId).replace(/\.0$/, '').trim();
