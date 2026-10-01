@@ -1,0 +1,16 @@
+{
+  "name": "GPS Verify",
+  "short_name": "GPS Verify",
+  "description": "Tower Site Audit Tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d6efd",
+  "theme_color": "#0d6efd",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d6efd'/><text y='.9em' font-size='70' x='50%' text-anchor='middle'>📡</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

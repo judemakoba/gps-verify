@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0d6efd" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>GPS Verify</title>
+  <link rel="manifest" href="manifest.json" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #0d6efd;
+      --primary-dark: #0b4fc1;
+      --success: #198754;
+      --danger: #dc3545;
+      --bg: #f4f6f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      margin: 0;
+    }
+
+    /* ── Screens ─────────────────────────────────────── */
+    .screen { display: none; }
+    .screen.active { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ── Auth screens ─────────────────────────────────── */
+    .auth-screen {
+      justify-content: center;
+      align-items: center;
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #0d6efd 0%, #0b4fc1 100%);
+    }
+    .auth-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    }
+    .auth-card .logo {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .auth-card .logo i { font-size: 3rem; color: var(--primary); }
+    .auth-card .logo h1 { font-size: 1.5rem; font-weight: 700; margin: 0.25rem 0 0; color: #222; }
+    .auth-card .logo p { color: #666; font-size: 0.85rem; margin: 0; }
+
+    /* ── Navbar ───────────────────────────────────────── */
+    .top-nav {
+      background: var(--primary);
+      color: #fff;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .top-nav .nav-title { font-weight: 700; font-size: 1.1rem; }
+    .top-nav .nav-user { font-size: 0.85rem; opacity: 0.9; }
+    .top-nav button { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; padding: 0; }
+    .top-nav .badge-role {
+      font-size: 0.7rem;
+      background: rgba(255,255,255,0.25);
+      padding: 2px 8px;
+      border-radius: 99px;
+      margin-left: 6px;
+    }
+
+    /* ── Main layout ──────────────────────────────────── */
+    .main-screen { }
+    .main-content { flex: 1; padding: 1.25rem 1rem; }
+
+    /* ── Search card ──────────────────────────────────── */
+    .search-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      margin-bottom: 1.25rem;
+    }
+    .search-card label { font-weight: 600; font-size: 0.85rem; color: #555; margin-bottom: 0.4rem; display: block; }
+    .search-card .input-group { border-radius: 10px; overflow: hidden; border: 2px solid #e0e0e0; transition: border-color 0.2s; }
+    .search-card .input-group:focus-within { border-color: var(--primary); }
+    .search-card input { border: none; outline: none; padding: 0.75rem 1rem; font-size: 1.1rem; width: 100%; }
+    .search-card .btn-search {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .search-card .btn-search:hover { background: var(--primary-dark); }
+    .search-card .btn-search:active { transform: scale(0.97); }
+
+    /* ── Result card ───────────────────────────────────── */
+    .result-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      border-left: 6px solid var(--primary);
+      margin-bottom: 1.25rem;
+      animation: slideUp 0.35s ease;
+    }
+    .result-card .site-id {
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: 2px;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+    .result-card .site-name {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #222;
+      margin-bottom: 0.25rem;
+    }
+    .result-card .towerco-badge {
+      display: inline-block;
+      background: #e7f0ff;
+      color: var(--primary-dark);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      margin-top: 0.5rem;
+    }
+    .result-card .match-count {
+      font-size: 0.8rem;
+      color: #888;
+      margin-top: 0.5rem;
+    }
+
+    /* ── Audit confirm ─────────────────────────────────── */
+    .audit-confirm-section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      margin-bottom: 1.25rem;
+      animation: slideUp 0.4s ease;
+    }
+    .audit-confirm-section h5 { font-weight: 700; margin-bottom: 1rem; font-size: 1rem; }
+    .btn-audit {
+      width: 100%;
+      padding: 0.9rem;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+    .btn-audit:active { transform: scale(0.97); }
+    .btn-audit:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-audited {
+      background: var(--success);
+      color: #fff;
+    }
+    .btn-not-audited {
+      background: #fff;
+      color: var(--danger);
+      border: 2px solid var(--danger);
+    }
+    .btn-audited:hover:not(:disabled) { background: #157347; }
+    .btn-not-audited:hover:not(:disabled) { background: #fff0f0; }
+
+    /* ── Audit log table ───────────────────────────────── */
+    .log-section { animation: slideUp 0.4s ease; }
+    .log-table { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+    .log-table table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .log-table th { background: var(--primary); color: #fff; padding: 0.65rem 0.75rem; text-align: left; white-space: nowrap; }
+    .log-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .log-table tr:last-child td { border-bottom: none; }
+    .badge-action { padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; }
+    .badge-action.LOOKUP { background: #e7f0ff; color: #0d6efd; }
+    .badge-action.AUDIT_CONFIRM { background: #e8f5e9; color: #2e7d32; }
+    .badge-audited { color: var(--success); font-weight: 700; }
+    .badge-not-audited { color: var(--danger); font-weight: 700; }
+
+    /* ── User list (admin) ──────────────────────────────── */
+    .user-section { background: #fff; border-radius: 12px; padding: 1.25rem; box-shadow: 0 2px 12px rgba(0,0,0,0.07); margin-bottom: 1.25rem; }
+    .user-list { list-style: none; padding: 0; margin: 0; }
+    .user-list li { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid #f0f0f0; }
+    .user-list li:last-child { border-bottom: none; }
+    .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; }
+
+    /* ── Alerts ───────────────────────────────────────── */
+    .alert-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 10px;
+      padding: 1rem;
+      color: #664d03;
+      font-size: 0.9rem;
+      margin-bottom: 1.25rem;
+    }
+    .alert-success { background: #d1e7dd; border-color: #a3cfbb; color: #0f5132; }
+    .alert-error { background: #f8d7da; border-color: #f1aeb5; color: #842029; }
+
+    /* ── Export button ─────────────────────────────────── */
+    .btn-export {
+      background: #222;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .btn-export:hover { background: #444; }
+
+    /* ── Toast ──────────────────────────────────────────── */
+    .toast-container { position: fixed; top: 70px; right: 12px; z-index: 9999; }
+    .toast-msg {
+      background: #222;
+      color: #fff;
+      padding: 0.75rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+      animation: fadeIn 0.25s ease;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      max-width: 300px;
+    }
+    .toast-msg.success { background: var(--success); }
+    .toast-msg.error { background: var(--danger); }
+
+    /* ── Register link ─────────────────────────────────── */
+    .auth-switch { text-align: center; margin-top: 1rem; font-size: 0.88rem; color: #666; }
+    .auth-switch a { color: var(--primary); text-decoration: none; font-weight: 600; cursor: pointer; }
+
+    /* ── Spinner ───────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .spinner.dark { border-color: rgba(13,110,253,0.3); border-top-color: var(--primary); }
+
+    /* ── Animations ────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ── Empty / not-found states ─────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: #999;
+    }
+    .empty-state i { font-size: 3rem; margin-bottom: 0.75rem; opacity: 0.5; }
+    .empty-state p { margin: 0; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── Toast container ──────────────────────────────────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- LOGIN SCREEN -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="screen active auth-screen" id="screenLogin">
+  <div class="auth-card">
+    <div class="logo">
+      <i class="bi bi-geo-alt-fill"></i>
+      <h1>GPS Verify</h1>
+      <p>Tower Site Audit Tool</p>
+    </div>
+    <div id="loginAlert"></div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Username</label>
+      <input type="text" class="form-control" id="loginUsername" placeholder="Enter username" autocomplete="off" />
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Password</label>
+      <input type="password" class="form-control" id="loginPassword" placeholder="Enter password" />
+    </div>
+    <button class="btn btn-primary w-100 fw-bold py-2" id="btnLogin" onclick="doLogin()">
+      Sign In
+    </button>
+    <p class="auth-switch">
+      No account? <a onclick="showScreen('screenRegister')">Register here</a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- REGISTER SCREEN -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="screen auth-screen" id="screenRegister">
+  <div class="auth-card">
+    <div class="logo">
+      <i class="bi bi-person-plus-fill"></i>
+      <h1>Create Account</h1>
+      <p>Join GPS Verify</p>
+    </div>
+    <div id="registerAlert"></div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Username</label>
+      <input type="text" class="form-control" id="regUsername" placeholder="Choose a username" autocomplete="off" />
+    </div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Password</label>
+      <input type="password" class="form-control" id="regPassword" placeholder="Choose a password" />
+    </div>
+    <button class="btn btn-primary w-100 fw-bold py-2" id="btnRegister" onclick="doRegister()">
+      Create Account
+    </button>
+    <p class="auth-switch">
+      Already have one? <a onclick="showScreen('screenLogin')">Sign in</a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- MAIN SCREEN -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="screen main-screen" id="screenMain">
+  <!-- Top Nav -->
+  <div class="top-nav">
+    <div>
+      <div class="nav-title"><i class="bi bi-geo-alt-fill me-1"></i>GPS Verify</div>
+      <div class="nav-user">
+        <span id="navUsername"></span>
+        <span class="badge-role" id="navRole"></span>
+      </div>
+    </div>
+    <button onclick="doLogout()" title="Sign out"><i class="bi bi-box-arrow-right"></i></button>
+  </div>
+
+  <div class="main-content">
+
+    <!-- Search Card -->
+    <div class="search-card">
+      <label><i class="bi bi-search me-1"></i>Enter Tower Co ID</label>
+      <div class="input-group">
+        <input type="text" id="inpTowercoId" placeholder="e.g. 701403" autocomplete="off" />
+        <button class="btn-search" id="btnSearch" onclick="doLookup()">
+          <i class="bi bi-binoculars"></i> Verify
+        </button>
+      </div>
+    </div>
+
+    <!-- Result area -->
+    <div id="resultArea"></div>
+
+    <!-- Audit confirm -->
+    <div class="audit-confirm-section" id="auditSection" style="display:none">
+      <h5><i class="bi bi-clipboard-check me-1"></i>Confirm Audit Status</h5>
+      <div id="auditCurrentInfo" class="mb-3" style="font-size:0.9rem;color:#666;"></div>
+      <button class="btn-audit btn-audited" id="btnAudited" onclick="doAudit(true)">
+        <i class="bi bi-check-circle-fill"></i> Site Audited
+      </button>
+      <button class="btn-audit btn-not-audited" id="btnNotAudited" onclick="doAudit(false)">
+        <i class="bi bi-x-circle-fill"></i> Not Audited
+      </button>
+      <div id="auditFeedback" class="mt-2" style="font-size:0.85rem;"></div>
+    </div>
+
+    <!-- Audit Log -->
+    <div class="log-section">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <h5 class="mb-0 fw-bold" style="font-size:1rem;"><i class="bi bi-list-ul me-1"></i>Audit Log</h5>
+        <div class="d-flex gap-2">
+          <button class="btn-export" id="btnExport" onclick="exportAudit()" style="display:none">
+            <i class="bi bi-download"></i> Export CSV
+          </button>
+          <button class="btn-export" style="background:#555;" onclick="loadAuditLog()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+          </button>
+        </div>
+      </div>
+      <div class="log-table" id="logTable">
+        <div class="empty-state"><i class="bi bi-inbox"></i><p>No audit records yet.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- SCRIPTS -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+  // ── Config ─────────────────────────────────────────────────────────────────
+  const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3001'
+    : window.location.origin;
+
+  // ── Auth helpers ───────────────────────────────────────────────────────────
+  let token = localStorage.getItem('gps_token');
+  let currentUser = JSON.parse(localStorage.getItem('gps_user') || 'null');
+
+  function saveSession(t, u) {
+    localStorage.setItem('gps_token', t);
+    localStorage.setItem('gps_user', JSON.stringify(u));
+    token = t; currentUser = u;
+  }
+
+  function clearSession() {
+    localStorage.removeItem('gps_token');
+    localStorage.removeItem('gps_user');
+    token = null; currentUser = null;
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API}${path}`, { ...opts, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
+  // ── Screen routing ──────────────────────────────────────────────────────────
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    if (id === 'screenMain') updateMainUI();
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────────────────
+  function toast(msg, type = '') {
+    const c = document.getElementById('toastContainer');
+    const el = document.createElement('div');
+    el.className = `toast-msg ${type}`;
+    el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  // ── Login ───────────────────────────────────────────────────────────────────
+  async function doLogin() {
+    const u = document.getElementById('loginUsername').value.trim();
+    const p = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('btnLogin');
+    const alert = document.getElementById('loginAlert');
+
+    if (!u || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please fill in all fields.</div>'; return; }
+    alert.innerHTML = '';
+    btn.innerHTML = '<span class="spinner"></span>Signing in…';
+    btn.disabled = true;
+
+    try {
+      const data = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      saveSession(data.token, data.user);
+      showScreen('screenMain');
+    } catch (e) {
+      alert.innerHTML = `<div class="alert-error alert-box">${e.message}</div>`;
+    } finally {
+      btn.innerHTML = 'Sign In';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Register ────────────────────────────────────────────────────────────────
+  async function doRegister() {
+    const u = document.getElementById('regUsername').value.trim();
+    const p = document.getElementById('regPassword').value;
+    const btn = document.getElementById('btnRegister');
+    const alert = document.getElementById('registerAlert');
+
+    if (!u || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please fill in all fields.</div>'; return; }
+    alert.innerHTML = '';
+    btn.innerHTML = '<span class="spinner"></span>Creating account…';
+    btn.disabled = true;
+
+    try {
+      const data = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      saveSession(data.token, data.user);
+      toast('Account created!', 'success');
+      showScreen('screenMain');
+    } catch (e) {
+      alert.innerHTML = `<div class="alert-error alert-box">${e.message}</div>`;
+    } finally {
+      btn.innerHTML = 'Create Account';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Logout ───────────────────────────────────────────────────────────────────
+  function doLogout() {
+    clearSession();
+    showScreen('screenLogin');
+    document.getElementById('loginUsername').value = '';
+    document.getElementById('loginPassword').value = '';
+  }
+
+  // ── Main UI update ──────────────────────────────────────────────────────────
+  function updateMainUI() {
+    if (!currentUser) return;
+    document.getElementById('navUsername').textContent = currentUser.username;
+    document.getElementById('navRole').textContent = currentUser.role.toUpperCase();
+    document.getElementById('btnExport').style.display = currentUser.role === 'admin' ? '' : 'none';
+    document.getElementById('inpTowercoId').value = '';
+    document.getElementById('resultArea').innerHTML = '';
+    document.getElementById('auditSection').style.display = 'none';
+    document.getElementById('auditFeedback').innerHTML = '';
+    loadAuditLog();
+  }
+
+  // ── Lookup ──────────────────────────────────────────────────────────────────
+  let lastLookupResult = null;
+
+  async function doLookup() {
+    const id = document.getElementById('inpTowercoId').value.trim().replace(/\.0$/, '');
+    const btn = document.getElementById('btnSearch');
+    const area = document.getElementById('resultArea');
+
+    if (!id) { toast('Please enter a Tower Co ID', 'error'); return; }
+
+    btn.innerHTML = '<span class="spinner"></span>Verifying…';
+    btn.disabled = true;
+    area.innerHTML = '';
+    document.getElementById('auditSection').style.display = 'none';
+    lastLookupResult = null;
+
+    try {
+      const data = await apiFetch(`/api/sites/lookup/${encodeURIComponent(id)}`);
+      lastLookupResult = data;
+      renderResults(data);
+    } catch (e) {
+      area.innerHTML = `
+        <div class="alert-error alert-box">
+          <i class="bi bi-exclamation-triangle me-1"></i>${e.message}
+        </div>`;
+    } finally {
+      btn.innerHTML = '<i class="bi bi-binoculars"></i> Verify';
+      btn.disabled = false;
+    }
+  }
+
+  function renderResults(data) {
+    const area = document.getElementById('resultArea');
+    if (data.results.length === 0) {
+      area.innerHTML = `<div class="alert-error alert-box">No site found for Tower Co ID: ${data.towercoId}</div>`;
+      return;
+    }
+
+    let html = `<div class="result-card">`;
+    if (data.results.length > 1) {
+      html += `<div class="match-count"><i class="bi bi-info-circle"></i> ${data.results.length} sites found — showing all</div>`;
+    }
+    data.results.forEach((s, i) => {
+      html += `
+        ${i > 0 ? '<hr style="border-color:#eee;margin:1rem 0;">' : ''}
+        <div class="site-id">${escapeHtml(s.siteId)}</div>
+        <div class="site-name">${escapeHtml(s.siteName)}</div>
+        <span class="towerco-badge"><i class="bi bi-houses me-1"></i>TowerCo ID: ${escapeHtml(s.towercoId)}</span>
+      `;
+    });
+    html += `</div>`;
+    area.innerHTML = html;
+
+    // Show audit confirm for first match
+    const first = data.results[0];
+    const auditSection = document.getElementById('auditSection');
+    document.getElementById('auditCurrentInfo').innerHTML =
+      `<strong>${escapeHtml(first.siteId)}</strong> — ${escapeHtml(first.siteName)}`;
+    auditSection.style.display = '';
+  }
+
+  // ── Audit confirm ────────────────────────────────────────────────────────────
+  async function doAudit(audited) {
+    if (!lastLookupResult || !lastLookupResult.results.length) return;
+    const site = lastLookupResult.results[0];
+    const btn = audited ? document.getElementById('btnAudited') : document.getElementById('btnNotAudited');
+    const feedback = document.getElementById('auditFeedback');
+
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner${audited ? '' : ' dark'}"></span>Saving…`;
+
+    try {
+      await apiFetch('/api/audits/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          towercoId: site.towercoId,
+          siteId: site.siteId,
+          siteName: site.siteName,
+          audited,
+        }),
+      });
+      feedback.innerHTML = audited
+        ? `<div class="alert-success alert-box mb-0"><i class="bi bi-check-circle-fill me-1"></i>Marked as AUDITED — logged at ${new Date().toLocaleTimeString()}</div>`
+        : `<div class="alert-error alert-box mb-0"><i class="bi bi-x-circle-fill me-1"></i>Marked as NOT AUDITED — logged at ${new Date().toLocaleTimeString()}</div>`;
+      loadAuditLog();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = audited
+        ? '<i class="bi bi-check-circle-fill"></i> Site Audited'
+        : '<i class="bi bi-x-circle-fill"></i> Not Audited';
+    }
+  }
+
+  // ── Audit log ────────────────────────────────────────────────────────────────
+  async function loadAuditLog() {
+    const table = document.getElementById('logTable');
+    try {
+      const records = await apiFetch('/api/audits');
+      if (!records.length) {
+        table.innerHTML = '<div class="empty-state"><i class="bi bi-inbox"></i><p>No audit records yet.</p></div>';
+        return;
+      }
+
+      // Sort newest first
+      records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      const isAdmin = currentUser && currentUser.role === 'admin';
+      let html = `<table>
+        <thead><tr>
+          ${isAdmin ? '<th>User</th>' : ''}
+          <th>Action</th>
+          <th>TowerCo ID</th>
+          <th>Site</th>
+          <th>Audited</th>
+          <th>Time</th>
+        </tr></thead><tbody>`;
+
+      records.forEach(r => {
+        const dt = new Date(r.timestamp);
+        const time = dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        const auditedCell = r.action === 'AUDIT_CONFIRM'
+          ? (r.audited ? '<span class="badge-audited">✓ YES</span>' : '<span class="badge-not-audited">✗ NO</span>')
+          : '—';
+        html += `<tr>
+          ${isAdmin ? `<td><strong>${escapeHtml(r.username)}</strong></td>` : ''}
+          <td><span class="badge-action ${r.action}">${r.action.replace('_', ' ')}</span></td>
+          <td><strong>${escapeHtml(r.towercoId || '')}</strong></td>
+          <td>${escapeHtml(r.siteId || '')} — ${escapeHtml(r.siteName || '')}</td>
+          <td>${auditedCell}</td>
+          <td style="white-space:nowrap;font-size:0.78rem;color:#888;">${time}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table>';
+      table.innerHTML = html;
+    } catch (e) {
+      table.innerHTML = `<div class="alert-error alert-box"><i class="bi bi-exclamation-triangle"></i> Failed to load log: ${e.message}</div>`;
+    }
+  }
+
+  // ── Export CSV ──────────────────────────────────────────────────────────────
+  async function exportAudit() {
+    try {
+      const res = await fetch(`${API}/api/audits/export`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('CSV downloaded!', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  // ── Utilities ────────────────────────────────────────────────────────────────
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Enter key support
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (document.getElementById('screenLogin').classList.contains('active')) doLogin();
+      else if (document.getElementById('screenRegister').classList.contains('active')) doRegister();
+      else if (document.getElementById('screenMain').classList.contains('active')) doLookup();
+    }
+  });
+
+  // ── Init ─────────────────────────────────────────────────────────────────────
+  if (token && currentUser) {
+    showScreen('screenMain');
+  } else {
+    showScreen('screenLogin');
+  }
+</script>
+</body>
+</html>
