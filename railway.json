@@ -11,5 +11,12 @@
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
+  },
+  "volumeMounts": {
+    "data": {
+      "mountPath": "/app/data",
+      "disk": true,
+      "subDirectory": "./backend/data"
+    }
   }
 }
