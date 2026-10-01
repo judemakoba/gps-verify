@@ -1,0 +1,13 @@
+{
+  "name": "gps-verify",
+  "version": "1.0.0",
+  "description": "Tower Site Audit Tool",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "install-backend": "cd backend && npm install",
+    "seed": "cd backend && python seed.py"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
