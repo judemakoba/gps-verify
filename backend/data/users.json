@@ -1,0 +1,10 @@
+[
+  {
+    "id": "f0d1b22d-c394-4b28-8fd6-0c565b956ee6",
+    "email": "makobajude@gmail.com",
+    "password": "$2a$10$FqseRPfzRsvDGxU6wmKRZupbm6Bm.mTn4OHQtq2c96Hl5lAA4Alpm",
+    "role": "admin",
+    "suspended": false,
+    "createdAt": "2026-10-01T10:17:55.190Z"
+  }
+]

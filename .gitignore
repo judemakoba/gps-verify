@@ -1,5 +1,4 @@
 node_modules/
-backend/data/users.json
 backend/data/audits.json
 .DS_Store
 *.log

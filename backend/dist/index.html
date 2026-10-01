@@ -45,6 +45,33 @@
       max-width: 400px;
       box-shadow: 0 8px 32px rgba(0,0,0,0.15);
     }
+    /* ── Tabs ──────────────────────────────────────────── */
+    .nav-tabs-custom {
+      display: flex;
+      background: #fff;
+      border-radius: 12px;
+      padding: 4px;
+      gap: 4px;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .nav-tabs-custom button {
+      flex: 1;
+      border: none;
+      background: transparent;
+      padding: 0.6rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-tabs-custom button.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
     .auth-card .logo {
       text-align: center;
       margin-bottom: 1.5rem;
@@ -299,8 +326,8 @@
     </div>
     <div id="loginAlert"></div>
     <div class="mb-3">
-      <label class="form-label fw-semibold">Username</label>
-      <input type="text" class="form-control" id="loginUsername" placeholder="Enter username" autocomplete="off" />
+      <label class="form-label fw-semibold">Email</label>
+      <input type="email" class="form-control" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
     </div>
     <div class="mb-3">
       <label class="form-label fw-semibold">Password</label>
@@ -327,8 +354,8 @@
     </div>
     <div id="registerAlert"></div>
     <div class="mb-3">
-      <label class="form-label fw-semibold">Username</label>
-      <input type="text" class="form-control" id="regUsername" placeholder="Choose a username" autocomplete="off" />
+      <label class="form-label fw-semibold">Email</label>
+      <input type="email" class="form-control" id="regEmail" placeholder="your@email.com" autocomplete="email" />
     </div>
     <div class="mb-3">
       <label class="form-label fw-semibold">Password</label>
@@ -352,7 +379,7 @@
     <div>
       <div class="nav-title"><i class="bi bi-geo-alt-fill me-1"></i>GPS Verify</div>
       <div class="nav-user">
-        <span id="navUsername"></span>
+        <span id="navEmail"></span>
         <span class="badge-role" id="navRole"></span>
       </div>
     </div>
@@ -403,6 +430,47 @@
       </div>
       <div class="log-table" id="logTable">
         <div class="empty-state"><i class="bi bi-inbox"></i><p>No audit records yet.</p></div>
+      </div>
+    </div>
+
+    <!-- Admin: User Management Panel -->
+    <div id="userMgmtPanel" style="display:none; margin-top:1.5rem;">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="mb-0 fw-bold" style="font-size:1rem;"><i class="bi bi-people-fill me-1"></i>User Management</h5>
+        <button class="btn btn-primary btn-sm fw-bold" onclick="showAddUserForm()">
+          <i class="bi bi-person-plus-fill"></i> Add User
+        </button>
+      </div>
+
+      <!-- Add User Form -->
+      <div id="addUserForm" style="display:none;" class="user-section mb-3">
+        <h6 class="fw-bold mb-2" style="font-size:0.9rem;"><i class="bi bi-user-plus me-1"></i>Add New User</h6>
+        <div class="row g-2 mb-2">
+          <div class="col-6">
+            <input type="email" class="form-control" id="newUserEmail" placeholder="Email address" />
+          </div>
+          <div class="col-6">
+            <input type="password" class="form-control" id="newUserPassword" placeholder="Password (min 6 chars)" />
+          </div>
+        </div>
+        <div class="d-flex gap-2 mb-2">
+          <select class="form-select" id="newUserRole" style="max-width:150px;">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary btn-sm fw-bold" onclick="doAddUser()">
+            <i class="bi bi-check-lg"></i> Create User
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="hideAddUserForm()">Cancel</button>
+        </div>
+        <div id="addUserFeedback" class="mt-2" style="font-size:0.85rem;"></div>
+      </div>
+
+      <!-- User List -->
+      <div class="user-section" id="userListSection">
+        <div id="userList"><div class="empty-state"><i class="bi bi-hourglass"></i><p>Loading users…</p></div></div>
       </div>
     </div>
   </div>
@@ -461,12 +529,12 @@
 
   // ── Login ───────────────────────────────────────────────────────────────────
   async function doLogin() {
-    const u = document.getElementById('loginUsername').value.trim();
+    const email = document.getElementById('loginEmail').value.trim();
     const p = document.getElementById('loginPassword').value;
     const btn = document.getElementById('btnLogin');
     const alert = document.getElementById('loginAlert');
 
-    if (!u || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please fill in all fields.</div>'; return; }
+    if (!email || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please enter email and password.</div>'; return; }
     alert.innerHTML = '';
     btn.innerHTML = '<span class="spinner"></span>Signing in…';
     btn.disabled = true;
@@ -474,7 +542,7 @@
     try {
       const data = await apiFetch('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username: u, password: p }),
+        body: JSON.stringify({ username: email, password: p }),
       });
       saveSession(data.token, data.user);
       showScreen('screenMain');
@@ -488,12 +556,12 @@
 
   // ── Register ────────────────────────────────────────────────────────────────
   async function doRegister() {
-    const u = document.getElementById('regUsername').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
     const p = document.getElementById('regPassword').value;
     const btn = document.getElementById('btnRegister');
     const alert = document.getElementById('registerAlert');
 
-    if (!u || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please fill in all fields.</div>'; return; }
+    if (!email || !p) { alert.innerHTML = '<div class="alert-error alert-box">Please enter email and password.</div>'; return; }
     alert.innerHTML = '';
     btn.innerHTML = '<span class="spinner"></span>Creating account…';
     btn.disabled = true;
@@ -501,7 +569,7 @@
     try {
       const data = await apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ username: u, password: p }),
+        body: JSON.stringify({ username: email, password: p }),
       });
       saveSession(data.token, data.user);
       toast('Account created!', 'success');
@@ -518,21 +586,23 @@
   function doLogout() {
     clearSession();
     showScreen('screenLogin');
-    document.getElementById('loginUsername').value = '';
+    document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
   }
 
   // ── Main UI update ──────────────────────────────────────────────────────────
   function updateMainUI() {
     if (!currentUser) return;
-    document.getElementById('navUsername').textContent = currentUser.username;
+    document.getElementById('navEmail').textContent = currentUser.email || currentUser.username;
     document.getElementById('navRole').textContent = currentUser.role.toUpperCase();
     document.getElementById('btnExport').style.display = currentUser.role === 'admin' ? '' : 'none';
     document.getElementById('inpTowercoId').value = '';
     document.getElementById('resultArea').innerHTML = '';
     document.getElementById('auditSection').style.display = 'none';
     document.getElementById('auditFeedback').innerHTML = '';
+    document.getElementById('userMgmtPanel').style.display = currentUser.role === 'admin' ? '' : 'none';
     loadAuditLog();
+    if (currentUser.role === 'admin') loadUserMgmt();
   }
 
   // ── Lookup ──────────────────────────────────────────────────────────────────
@@ -703,12 +773,136 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // ── User Management (Admin) ─────────────────────────────────────────────────
+  function showAddUserForm() {
+    document.getElementById('addUserForm').style.display = '';
+    document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserPassword').value = '';
+    document.getElementById('newUserRole').value = 'user';
+    document.getElementById('addUserFeedback').innerHTML = '';
+    document.getElementById('newUserEmail').focus();
+  }
+
+  function hideAddUserForm() {
+    document.getElementById('addUserForm').style.display = 'none';
+  }
+
+  async function doAddUser() {
+    const email = document.getElementById('newUserEmail').value.trim();
+    const password = document.getElementById('newUserPassword').value;
+    const role = document.getElementById('newUserRole').value;
+    const feedback = document.getElementById('addUserFeedback');
+
+    if (!email || !password) {
+      feedback.innerHTML = '<div class="alert-error alert-box">Email and password required.</div>';
+      return;
+    }
+    if (password.length < 6) {
+      feedback.innerHTML = '<div class="alert-error alert-box">Password must be at least 6 characters.</div>';
+      return;
+    }
+
+    try {
+      const user = await apiFetch('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, role }),
+      });
+      feedback.innerHTML = '<div class="alert-success alert-box mb-0"><i class="bi bi-check-circle-fill"></i> User created successfully!</div>';
+      hideAddUserForm();
+      loadUserMgmt();
+    } catch (e) {
+      feedback.innerHTML = `<div class="alert-error alert-box">${e.message}</div>`;
+    }
+  }
+
+  async function loadUserMgmt() {
+    const list = document.getElementById('userList');
+    try {
+      const users = await apiFetch('/api/admin/users');
+      if (!users.length) {
+        list.innerHTML = '<div class="empty-state"><i class="bi bi-people"></i><p>No users found.</p></div>';
+        return;
+      }
+      const meId = currentUser && currentUser.id;
+      let html = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+        <thead><tr style="background:#f8f9fa;">
+          <th style="padding:0.6rem 0.75rem;text-align:left;">Email</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;">Role</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;">Status</th>
+          <th style="padding:0.6rem 0.75rem;text-align:left;">Created</th>
+          <th style="padding:0.6rem 0.75rem;text-align:right;">Actions</th>
+        </tr></thead><tbody>`;
+
+      users.forEach(u => {
+        const isMe = u.id === meId;
+        const isPrimaryAdmin = u.email === 'makobajude@gmail.com';
+        const roleBadge = u.role === 'admin'
+          ? '<span style="background:#e7f0ff;color:#0d6efd;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:700;">ADMIN</span>'
+          : '<span style="background:#f0f0f0;color:#555;padding:2px 8px;border-radius:99px;font-size:0.72rem;font-weight:700;">USER</span>';
+        const statusBadge = u.suspended
+          ? '<span style="color:#dc3545;font-weight:700;">SUSPENDED</span>'
+          : '<span style="color:#198754;font-weight:700;">ACTIVE</span>';
+        const actions = isPrimaryAdmin
+          ? '<span style="color:#999;font-size:0.78rem;">Protected</span>'
+          : `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+              ${u.suspended
+                ? `<button class="btn btn-success btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="doActivateUser('${u.id}')"><i class="bi bi-play-fill"></i> Activate</button>`
+                : (!isMe ? `<button class="btn btn-warning btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="doSuspendUser('${u.id}')"><i class="bi bi-pause-fill"></i> Suspend</button>` : '')
+              }
+              ${!isMe ? `<button class="btn btn-danger btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="doDeleteUser('${u.id}')"><i class="bi bi-trash"></i> Delete</button>` : ''}
+            </div>`;
+
+        html += `<tr style="border-bottom:1px solid #f0f0f0;">
+          <td style="padding:0.6rem 0.75rem;">
+            <strong>${escapeHtml(u.email)}</strong>
+            ${isMe ? '<span style="margin-left:6px;font-size:0.72rem;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:99px;">You</span>' : ''}
+          </td>
+          <td style="padding:0.6rem 0.75rem;">${roleBadge}</td>
+          <td style="padding:0.6rem 0.75rem;">${statusBadge}</td>
+          <td style="padding:0.6rem 0.75rem;color:#888;font-size:0.78rem;">${new Date(u.createdAt).toLocaleDateString()}</td>
+          <td style="padding:0.6rem 0.75rem;text-align:right;">${actions}</td>
+        </tr>`;
+      });
+
+      html += '</tbody></table>';
+      list.innerHTML = html;
+    } catch (e) {
+      list.innerHTML = `<div class="alert-error alert-box"><i class="bi bi-exclamation-triangle"></i> ${e.message}</div>`;
+    }
+  }
+
+  async function doSuspendUser(id) {
+    if (!confirm('Suspend this user? They will not be able to log in.')) return;
+    try {
+      await apiFetch(`/api/admin/users/${id}/suspend`, { method: 'POST' });
+      toast('User suspended', 'success');
+      loadUserMgmt();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function doActivateUser(id) {
+    try {
+      await apiFetch(`/api/admin/users/${id}/activate`, { method: 'POST' });
+      toast('User activated', 'success');
+      loadUserMgmt();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function doDeleteUser(id) {
+    if (!confirm('Permanently delete this user? This cannot be undone.')) return;
+    try {
+      await apiFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      toast('User deleted', 'success');
+      loadUserMgmt();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
   // Enter key support
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       if (document.getElementById('screenLogin').classList.contains('active')) doLogin();
       else if (document.getElementById('screenRegister').classList.contains('active')) doRegister();
-      else if (document.getElementById('screenMain').classList.contains('active')) doLookup();
+      else if (document.getElementById('screenMain').classList.contains('active') && !document.getElementById('addUserForm').matches(':hover')) doLookup();
     }
   });
 

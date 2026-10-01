@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'gps-verify-jwt-secret-2024';
 const DATA_DIR = path.join(__dirname, 'data');
+const ADMIN_EMAIL = 'makobajude@gmail.com';
 
 // ── Ensure data dir ──────────────────────────────────────────────────────────
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -34,6 +35,10 @@ function writeJSON(p, data) {
   fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
 }
 
+// ── Email validation ──────────────────────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmail(e) { return EMAIL_RE.test(String(e || '').trim().toLowerCase()); }
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
@@ -42,8 +47,14 @@ app.use(express.json());
 function authenticate(req, res, next) {
   const h = req.headers.authorization;
   if (!h || !h.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
-  try { req.user = jwt.verify(h.slice(7), JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Invalid token' }); }
+  try {
+    req.user = jwt.verify(h.slice(7), JWT_SECRET);
+    // Check if user is suspended
+    const users = readJSON(P.users);
+    const dbUser = users.find(u => u.id === req.user.id);
+    if (dbUser && dbUser.suspended) return res.status(403).json({ error: 'Account suspended. Contact admin.' });
+    next();
+  } catch { res.status(401).json({ error: 'Invalid token' }); }
 }
 
 function adminOnly(req, res, next) {
@@ -54,39 +65,50 @@ function adminOnly(req, res, next) {
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 app.post('/api/auth/register', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'username & password required' });
-  if (username.length < 3) return res.status(400).json({ error: 'Username ≥ 3 chars' });
-  if (password.length < 4) return res.status(400).json({ error: 'Password ≥ 4 chars' });
+  if (!username || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (!isValidEmail(username)) return res.status(400).json({ error: 'Must be a valid email address' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
+  const email = username.trim().toLowerCase();
   const users = readJSON(P.users);
-  if (users.find(u => u.username.toLowerCase() === username.toLowerCase()))
-    return res.status(409).json({ error: 'Username taken' });
+
+  if (users.find(u => u.email === email))
+    return res.status(409).json({ error: 'Email already registered' });
 
   const hashed = await bcrypt.hash(password, 10);
-  // First user to register becomes admin
-  const role = users.length === 0 ? 'admin' : 'user';
-  const user = { id: uuidv4(), username: username.trim(), password: hashed, role, createdAt: new Date().toISOString() };
+  // First user OR admin email becomes admin
+  const role = (users.length === 0 || email === ADMIN_EMAIL) ? 'admin' : 'user';
+  const user = {
+    id: uuidv4(),
+    email,
+    password: hashed,
+    role,
+    suspended: false,
+    createdAt: new Date().toISOString(),
+  };
   users.push(user);
   writeJSON(P.users, users);
 
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+  res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: 'username & password required' });
+  if (!username || !password) return res.status(400).json({ error: 'Email and password required' });
 
+  const email = username.trim().toLowerCase();
   const users = readJSON(P.users);
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  const user = users.find(u => u.email === email);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+  if (user.suspended) return res.status(403).json({ error: 'Account suspended. Contact admin.' });
 
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
+  res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
 });
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
@@ -94,10 +116,83 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   const users = readJSON(P.users);
   const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json({ id: user.id, username: user.username, role: user.role });
+  res.json({ id: user.id, email: user.email, role: user.role, suspended: user.suspended });
 });
 
-// ── POST /api/admin/seed (admin-only: bulk seed sites from JSON) ──────────────
+// ── GET /api/admin/users ───────────────────────────────────────────────────────
+app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
+  const users = readJSON(P.users);
+  res.json(users.map(u => ({
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    suspended: u.suspended,
+    createdAt: u.createdAt,
+  })));
+});
+
+// ── POST /api/admin/users ─────────────────────────────────────────────────────
+app.post('/api/admin/users', authenticate, adminOnly, async (req, res) => {
+  const { email, password, role } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'email & password required' });
+  if (!isValidEmail(email)) return res.status(400).json({ error: 'Must be a valid email' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 chars' });
+  if (!['admin', 'user'].includes(role)) return res.status(400).json({ error: 'role must be admin or user' });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const users = readJSON(P.users);
+  if (users.find(u => u.email === cleanEmail))
+    return res.status(409).json({ error: 'Email already registered' });
+
+  const hashed = await bcrypt.hash(password, 10);
+  const user = {
+    id: uuidv4(),
+    email: cleanEmail,
+    password: hashed,
+    role,
+    suspended: false,
+    createdAt: new Date().toISOString(),
+  };
+  users.push(user);
+  writeJSON(P.users, users);
+  res.json({ id: user.id, email: user.email, role: user.role, suspended: user.suspended, createdAt: user.createdAt });
+});
+
+// ── DELETE /api/admin/users/:id ───────────────────────────────────────────────
+app.delete('/api/admin/users/:id', authenticate, adminOnly, (req, res) => {
+  const users = readJSON(P.users);
+  const idx = users.findIndex(u => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'User not found' });
+  if (users[idx].email === ADMIN_EMAIL)
+    return res.status(403).json({ error: 'Cannot delete the primary admin account' });
+  users.splice(idx, 1);
+  writeJSON(P.users, users);
+  res.json({ ok: true });
+});
+
+// ── POST /api/admin/users/:id/suspend ─────────────────────────────────────────
+app.post('/api/admin/users/:id/suspend', authenticate, adminOnly, (req, res) => {
+  const users = readJSON(P.users);
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.email === ADMIN_EMAIL)
+    return res.status(403).json({ error: 'Cannot suspend the primary admin account' });
+  user.suspended = true;
+  writeJSON(P.users, users);
+  res.json({ ok: true, suspended: true });
+});
+
+// ── POST /api/admin/users/:id/activate ────────────────────────────────────────
+app.post('/api/admin/users/:id/activate', authenticate, adminOnly, (req, res) => {
+  const users = readJSON(P.users);
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  user.suspended = false;
+  writeJSON(P.users, users);
+  res.json({ ok: true, suspended: false });
+});
+
+// ── POST /api/admin/seed ──────────────────────────────────────────────────────
 app.post('/api/admin/seed', authenticate, adminOnly, (req, res) => {
   const { sites } = req.body;
   if (!Array.isArray(sites)) return res.status(400).json({ error: 'sites must be an array' });
@@ -120,20 +215,16 @@ app.get('/api/sites/count', (req, res) => {
 app.get('/api/sites/lookup/:towercoId', authenticate, (req, res) => {
   const id = String(req.params.towercoId).replace(/\.0$/, '').trim();
   const sites = readJSON(P.sites);
-
-  // Fast index lookup
   const matches = sites.filter(s => s.towercoId === id);
   if (!matches.length) return res.status(404).json({ error: `Tower Co ID "${id}" not found in database` });
 
-  // Log lookup
   const audits = readJSON(P.audits);
   audits.push({
-    id: uuidv4(), userId: req.user.id, username: req.user.username,
+    id: uuidv4(), userId: req.user.id, username: req.user.email,
     action: 'LOOKUP', towercoId: id, result: matches.length,
     timestamp: new Date().toISOString(),
   });
   writeJSON(P.audits, audits);
-
   res.json({ towercoId: id, results: matches });
 });
 
@@ -145,7 +236,7 @@ app.post('/api/audits/confirm', authenticate, (req, res) => {
 
   const audits = readJSON(P.audits);
   const record = {
-    id: uuidv4(), userId: req.user.id, username: req.user.username,
+    id: uuidv4(), userId: req.user.id, username: req.user.email,
     action: 'AUDIT_CONFIRM', towercoId: String(towercoId).trim(),
     siteId: siteId || '', siteName: siteName || '', audited,
     timestamp: new Date().toISOString(),
@@ -183,8 +274,8 @@ if (fs.existsSync(distPath)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`GPS Verify API → http://localhost:${PORT}`);
+  console.log(`GPS Verify API -> http://localhost:${PORT}`);
   const sites = readJSON(P.sites);
-  console.log(`Sites loaded: ${sites.length}`);
-  if (!sites.length) console.warn('⚠ No sites in data/sites.json — run: node seed.js');
+  const users = readJSON(P.users);
+  console.log(`Sites: ${sites.length} | Users: ${users.length}`);
 });
