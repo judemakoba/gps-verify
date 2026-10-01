@@ -63,7 +63,9 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(409).json({ error: 'Username taken' });
 
   const hashed = await bcrypt.hash(password, 10);
-  const user = { id: uuidv4(), username: username.trim(), password: hashed, role: 'user', createdAt: new Date().toISOString() };
+  // First user to register becomes admin
+  const role = users.length === 0 ? 'admin' : 'user';
+  const user = { id: uuidv4(), username: username.trim(), password: hashed, role, createdAt: new Date().toISOString() };
   users.push(user);
   writeJSON(P.users, users);
 
