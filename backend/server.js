@@ -39,6 +39,24 @@ function writeJSON(p, data) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidEmail(e) { return EMAIL_RE.test(String(e || '').trim().toLowerCase()); }
 
+// ── OTP store (in-memory, 10-min expiry) ─────────────────────────────────────
+// Stored in-memory — resets on server restart. On Railway free tier the
+// container is ephemeral so this is fine (admins can also reset passwords).
+const otpStore = new Map(); // key: email, value: { code, expiresAt }
+function generateOTP(email) {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  otpStore.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  return code;
+}
+function verifyOTP(email, code) {
+  const entry = otpStore.get(email.toLowerCase());
+  if (!entry) return false;
+  if (Date.now() > entry.expiresAt) { otpStore.delete(email.toLowerCase()); return false; }
+  if (entry.code !== code) return false;
+  otpStore.delete(email.toLowerCase());
+  return true;
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
@@ -119,6 +137,51 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   res.json({ id: user.id, email: user.email, role: user.role, suspended: user.suspended });
 });
 
+// ── POST /api/auth/forgot-password ────────────────────────────────────────────
+// Generates a 6-digit OTP and returns it in the response.
+// In production you'd send this via email — on Railway we show it in the UI
+// so an admin can relay it to the user via WhatsApp/phone/SMS.
+app.post('/api/auth/forgot-password', (req, res) => {
+  const { email } = req.body;
+  if (!email || !isValidEmail(email))
+    return res.status(400).json({ error: 'Valid email required' });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const users = readJSON(P.users);
+  if (!users.find(u => u.email === cleanEmail))
+    return res.status(404).json({ error: 'No account found with that email' });
+
+  const code = generateOTP(cleanEmail);
+  console.log(`[OTP] ${cleanEmail} -> ${code} (expires in 10 min)`);
+  res.json({
+    ok: true,
+    message: `Your 6-digit reset code is: ${code}\nIt expires in 10 minutes. Contact your admin if you did not receive it.`,
+    // In a real app: send email. For this deployment, code is returned here.
+    code, // frontend will display this to the user
+  });
+});
+
+// ── POST /api/auth/reset-password ─────────────────────────────────────────────
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { email, code, newPassword } = req.body;
+  if (!email || !code || !newPassword)
+    return res.status(400).json({ error: 'email, code, and newPassword required' });
+  if (!isValidEmail(email))
+    return res.status(400).json({ error: 'Valid email required' });
+  if (newPassword.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!verifyOTP(email.trim().toLowerCase(), code))
+    return res.status(400).json({ error: 'Invalid or expired code' });
+
+  const users = readJSON(P.users);
+  const user = users.find(u => u.email === email.trim().toLowerCase());
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  writeJSON(P.users, users);
+  res.json({ ok: true, message: 'Password updated successfully. You can now log in.' });
+});
+
 // ── GET /api/admin/users ───────────────────────────────────────────────────────
 app.get('/api/admin/users', authenticate, adminOnly, (req, res) => {
   const users = readJSON(P.users);
@@ -190,6 +253,21 @@ app.post('/api/admin/users/:id/activate', authenticate, adminOnly, (req, res) =>
   user.suspended = false;
   writeJSON(P.users, users);
   res.json({ ok: true, suspended: false });
+});
+
+// ── POST /api/admin/users/:id/reset-password ───────────────────────────────────
+app.post('/api/admin/users/:id/reset-password', authenticate, adminOnly, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  const users = readJSON(P.users);
+  const user = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  writeJSON(P.users, users);
+  res.json({ ok: true, message: 'Password updated successfully.' });
 });
 
 // ── POST /api/admin/seed ──────────────────────────────────────────────────────

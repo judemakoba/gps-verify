@@ -339,6 +339,53 @@
     <p class="auth-switch">
       No account? <a onclick="showScreen('screenRegister')">Register here</a>
     </p>
+    <p class="auth-switch" style="margin-top:0.5rem;">
+      <a onclick="showScreen('screenForgot')">Forgot password?</a>
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- FORGOT PASSWORD SCREEN -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="screen auth-screen" id="screenForgot">
+  <div class="auth-card">
+    <div class="logo">
+      <i class="bi bi-key-fill"></i>
+      <h1>Reset Password</h1>
+      <p>Enter your email to receive a 6-digit code</p>
+    </div>
+    <div id="forgotAlert"></div>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Email</label>
+      <input type="email" class="form-control" id="forgotEmail" placeholder="your@email.com" autocomplete="email" />
+    </div>
+    <button class="btn btn-primary w-100 fw-bold py-2" id="btnForgotSend" onclick="doForgotPassword()">
+      Send Reset Code
+    </button>
+
+    <!-- OTP + new password step (shown after code is sent) -->
+    <div id="forgotOtpStep" style="display:none; margin-top:1.2rem;">
+      <hr style="margin:1rem 0; border-color:#eee;" />
+      <p style="font-size:0.88rem; color:#666; margin-bottom:0.75rem;">
+        Enter the 6-digit code shown below, then choose a new password.
+      </p>
+      <div class="mb-2">
+        <label class="form-label fw-semibold" style="font-size:0.85rem;">Reset Code</label>
+        <input type="text" class="form-control" id="forgotOtp" placeholder="e.g. 482931" maxlength="6" autocomplete="off" />
+      </div>
+      <div class="mb-2">
+        <label class="form-label fw-semibold" style="font-size:0.85rem;">New Password</label>
+        <input type="password" class="form-control" id="forgotNewPass" placeholder="Min 6 characters" />
+      </div>
+      <button class="btn btn-success w-100 fw-bold py-2" id="btnForgotReset" onclick="doResetPassword()">
+        Reset Password
+      </button>
+    </div>
+
+    <p class="auth-switch" style="margin-top:1rem;">
+      Remember your password? <a onclick="showScreen('screenLogin')">Sign in</a>
+    </p>
   </div>
 </div>
 
@@ -588,6 +635,75 @@
     showScreen('screenLogin');
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
+  }
+
+  // ── Forgot Password ─────────────────────────────────────────────────────────
+  let pendingForgotEmail = '';
+
+  async function doForgotPassword() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    const btn = document.getElementById('btnForgotSend');
+    const alert = document.getElementById('forgotAlert');
+    if (!email) { alert.innerHTML = '<div class="alert-error alert-box">Please enter your email.</div>'; return; }
+    alert.innerHTML = '';
+    btn.innerHTML = '<span class="spinner"></span>Sending…';
+    btn.disabled = true;
+    try {
+      const data = await apiFetch('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+      pendingForgotEmail = email;
+      document.getElementById('forgotOtpStep').style.display = '';
+      document.getElementById('forgotAlert').innerHTML =
+        `<div class="alert-success alert-box mb-2">
+          <i class="bi bi-check-circle-fill"></i> Code sent! Enter it below along with your new password.
+          <div style="margin-top:0.5rem;padding:0.6rem;background:#fff;border-radius:8px;font-weight:700;font-size:1.2rem;letter-spacing:4px;color:#0d6efd;text-align:center;user-select:all;">${data.code}</div>
+          <div style="font-size:0.78rem;color:#666;margin-top:0.4rem;">Share this code securely with the user (e.g. via WhatsApp or phone).</div>
+         </div>`;
+      document.getElementById('forgotEmail').readOnly = true;
+      document.getElementById('btnForgotSend').style.display = 'none';
+    } catch (e) {
+      alert.innerHTML = `<div class="alert-error alert-box">${e.message}</div>`;
+    } finally {
+      btn.innerHTML = 'Send Reset Code';
+      btn.disabled = false;
+    }
+  }
+
+  async function doResetPassword() {
+    const code = document.getElementById('forgotOtp').value.trim();
+    const newPass = document.getElementById('forgotNewPass').value;
+    const btn = document.getElementById('btnForgotReset');
+    if (!code || !newPass) { alert('Please fill in all fields.'); return; }
+    if (newPass.length < 6) { alert('Password must be at least 6 characters.'); return; }
+    btn.innerHTML = '<span class="spinner"></span>Resetting…';
+    btn.disabled = true;
+    try {
+      await apiFetch('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: pendingForgotEmail, code, newPassword: newPass }),
+      });
+      toast('Password reset! You can now sign in.', 'success');
+      resetForgotScreen();
+      showScreen('screenLogin');
+    } catch (e) {
+      alert(`<div class="alert-error alert-box">${e.message}</div>`);
+    } finally {
+      btn.innerHTML = 'Reset Password';
+      btn.disabled = false;
+    }
+  }
+
+  function resetForgotScreen() {
+    document.getElementById('forgotEmail').value = '';
+    document.getElementById('forgotEmail').readOnly = false;
+    document.getElementById('forgotOtp').value = '';
+    document.getElementById('forgotNewPass').value = '';
+    document.getElementById('forgotOtpStep').style.display = 'none';
+    document.getElementById('forgotAlert').innerHTML = '';
+    document.getElementById('btnForgotSend').style.display = '';
+    pendingForgotEmail = '';
   }
 
   // ── Main UI update ──────────────────────────────────────────────────────────
@@ -850,6 +966,7 @@
                 : (!isMe ? `<button class="btn btn-warning btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="doSuspendUser('${u.id}')"><i class="bi bi-pause-fill"></i> Suspend</button>` : '')
               }
               ${!isMe ? `<button class="btn btn-danger btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="doDeleteUser('${u.id}')"><i class="bi bi-trash"></i> Delete</button>` : ''}
+              ${!isMe || isMe ? `<button class="btn btn-outline-primary btn-sm" style="font-size:0.75rem;padding:2px 8px;" onclick="showResetPassForm('${u.id}', '${escapeHtml(u.email)}')"><i class="bi bi-lock-fill"></i> Reset Pass</button>` : ''}
             </div>`;
 
         html += `<tr style="border-bottom:1px solid #f0f0f0;">
@@ -897,11 +1014,30 @@
     } catch (e) { toast(e.message, 'error'); }
   }
 
+  // ── Admin Reset User Password ───────────────────────────────────────────────
+  function showResetPassForm(userId, userEmail) {
+    const newPass = prompt(`Reset password for ${userEmail}\n\nEnter new password (min 6 characters):`);
+    if (!newPass || newPass.length < 6) {
+      if (newPass !== null) toast('Password must be at least 6 characters.', 'error');
+      return;
+    }
+    apiFetch(`/api/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword: newPass }),
+    }).then(() => {
+      toast(`Password reset for ${userEmail}`, 'success');
+    }).catch(e => toast(e.message, 'error'));
+  }
+
   // Enter key support
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       if (document.getElementById('screenLogin').classList.contains('active')) doLogin();
       else if (document.getElementById('screenRegister').classList.contains('active')) doRegister();
+      else if (document.getElementById('screenForgot').classList.contains('active')) {
+        if (document.getElementById('forgotOtpStep').style.display !== 'none') doResetPassword();
+        else doForgotPassword();
+      }
       else if (document.getElementById('screenMain').classList.contains('active') && !document.getElementById('addUserForm').matches(':hover')) doLookup();
     }
   });
