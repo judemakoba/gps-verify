@@ -9,6 +9,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { mergeState } from './sync.js';
+import { sendOtpEmail, isEmailConfigured, emailConfig } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -107,9 +108,16 @@ function isValidEmail(e) { return EMAIL_RE.test(String(e || '').trim().toLowerCa
 // Stored in-memory — resets on server restart. On Railway free tier the
 // container is ephemeral so this is fine (admins can also reset passwords).
 const otpStore = new Map(); // key: email, value: { code, expiresAt }
+const OTP_RESEND_GRACE_MS = 30 * 1000; // re-requesting within 30 s keeps the same code
 function generateOTP(email) {
+  const key = email.toLowerCase();
+  const existing = otpStore.get(key);
+  // Do not invalidate a code the user may have just received by email or SMS.
+  if (existing && Date.now() < existing.expiresAt && Date.now() - existing.issuedAt < OTP_RESEND_GRACE_MS) {
+    return existing.code;
+  }
   const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  otpStore.set(key, { code, issuedAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000 });
   return code;
 }
 function verifyOTP(email, code) {
@@ -213,10 +221,10 @@ app.get('/api/auth/me', authenticate, (req, res) => {
 });
 
 // ── POST /api/auth/forgot-password ────────────────────────────────────────────
-// Generates a 6-digit OTP and returns it in the response.
-// In production you'd send this via email — on Railway we show it in the UI
-// so an admin can relay it to the user via WhatsApp/phone/SMS.
-app.post('/api/auth/forgot-password', (req, res) => {
+// Generates a 6-digit OTP and delivers it by email when an email provider is
+// configured. Without a provider the code is returned in the response so an
+// admin can relay it via WhatsApp/phone/SMS (the original behaviour).
+app.post('/api/auth/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email || !isValidEmail(email))
     return res.status(400).json({ error: 'Valid email required' });
@@ -229,11 +237,27 @@ app.post('/api/auth/forgot-password', (req, res) => {
 
   const code = generateOTP(cleanEmail);
   console.log(`[OTP] ${cleanEmail} -> ${code} (expires in 10 min)`);
+
+  const delivery = await sendOtpEmail({ to: cleanEmail, code });
+  if (delivery.delivered) {
+    console.log(`[OTP] emailed via ${delivery.provider} to ${cleanEmail}`);
+    return res.json({
+      ok: true,
+      delivered: true,
+      message: `A 6-digit reset code was sent to ${cleanEmail}. It expires in 10 minutes. Check your inbox (and spam folder).`,
+    });
+  }
+
+  if (delivery.reason !== 'not-configured') {
+    console.error(`[OTP] email delivery failed (${delivery.reason}: ${delivery.detail || ''}) — falling back to the in-UI code`);
+  }
   res.json({
     ok: true,
+    delivered: false,
     message: `Your 6-digit reset code is: ${code}\nIt expires in 10 minutes. Contact your admin if you did not receive it.`,
-    // In a real app: send email. For this deployment, code is returned here.
-    code, // frontend will display this to the user
+    // No email provider configured (or the send failed): the frontend shows
+    // this so an admin can relay it to the user.
+    code,
   });
 });
 
