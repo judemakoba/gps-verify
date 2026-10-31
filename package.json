@@ -5,7 +5,8 @@
   "scripts": {
     "start": "cd backend && npm start",
     "install-backend": "cd backend && npm install",
-    "seed": "cd backend && python seed.py"
+    "build": "node tools/build.js",
+    "icons": "python tools/make_icons.py"
   },
   "engines": {
     "node": ">=18"

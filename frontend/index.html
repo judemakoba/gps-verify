@@ -8,8 +8,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>GPS Verify</title>
   <link rel="manifest" href="manifest.json" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <!-- Vendored locally: auditors often work at sites with no/weak data connection -->
+  <link href="/vendor/bootstrap.min.css" rel="stylesheet" />
+  <link href="/vendor/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet" />
   <style>
     :root {
       --primary: #0d6efd;
@@ -1047,6 +1051,15 @@
     showScreen('screenMain');
   } else {
     showScreen('screenLogin');
+  }
+
+  // ── Service worker (offline app shell) ───────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        // Non-fatal: the app still works, just without offline support.
+      });
+    });
   }
 </script>
 </body>

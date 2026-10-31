@@ -347,7 +347,17 @@ app.get('/api/audits/export', authenticate, adminOnly, (req, res) => {
 // ── Static frontend (production) ───────────────────────────────────────────────
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders(res, filePath) {
+      // The service worker must never be cached, or clients would keep
+      // running an outdated shell and never pick up app updates.
+      if (filePath.endsWith('sw.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
+  }));
   app.get('*', (req, res) => res.sendFile(path.join(distPath, 'index.html')));
 }
 
