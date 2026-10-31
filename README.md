@@ -198,7 +198,22 @@ use Tailscale `100.x` addresses).
 | LAN address | `192.168.1.205` | `192.168.1.206` |
 | Tailscale IP | `100.126.59.49` | `100.100.206.69` |
 | Public URL | `https://gps-verify.tailfd1512.ts.net` | `https://gps-verify-2.tailfd1512.ts.net` |
-| tailscaled mode | userspace | kernel TUN |
+| tailscaled mode | kernel TUN | kernel TUN |
+| Sync role | drives the peer every 60 s | drives the peer every 60 s |
+
+Both instances drive the sync loop, so either site keeps the other up to date
+even if one of them goes offline. The merges are idempotent, so two drivers
+never fight each other.
+
+> **Why kernel TUN matters.** In `tailscaled --tun=userspace-networking` mode a
+> node has no `tailscale0` interface and **cannot originate** L3 tailnet
+> traffic — plain sockets to `100.x` fail with "No route to host". Both
+> containers now run in kernel mode (privileged CT + `/dev/net/tun`), so each
+> can reach the other directly. Converting a container means: drop
+> `--tun=userspace-networking` from the `tailscaled` unit, restart it, then
+> re-apply the funnel with `/usr/local/sbin/tailscale-funnel-setup` (it waits
+> for `BackendState == "Running"` first). The public URL is down for about a
+> minute during that switch.
 
 ### How sync works
 
@@ -256,9 +271,41 @@ SYNC_SECRET=...  SYNC_PEER_URL=                        SYNC_NODE_ID=gps-verify
 ### Tests
 
 ```bash
-npm test        # merge semantics (commutativity, idempotency, tombstones)
+npm test        # merge semantics (commutativity, idempotency, tombstones) + email delivery
 npm run test:e2e   # boots two real instances and checks convergence
 ```
+
+---
+
+## Password Reset by Email
+
+`POST /api/auth/forgot-password` issues a 6-digit code that is valid for 10
+minutes. How it reaches the user depends on the configuration:
+
+| `EMAIL_PROVIDER` | Behaviour |
+|---|---|
+| `none` (default) | The code is returned in the API response and shown in the app. An admin relays it by phone/WhatsApp. |
+| `resend` | The code is emailed via the Resend HTTP API (no extra dependency). **The code is not returned in the response.** |
+| `smtp` | The code is emailed via any SMTP server (nodemailer). **The code is not returned in the response.** |
+
+A provider is only used when all of its credentials are present. If a send
+fails, the app falls back to showing the code in the UI and logs the error —
+so a password reset is never blocked by a mail outage.
+
+| Variable | Used by | Meaning |
+|---|---|---|
+| `EMAIL_PROVIDER` | all | `none`, `resend` or `smtp` |
+| `EMAIL_API_KEY` | resend | Resend API key |
+| `EMAIL_FROM` | resend, smtp | Sender address, e.g. `GPS Verify <no-reply@yourdomain.com>` |
+| `EMAIL_SMTP_HOST` | smtp | SMTP host |
+| `EMAIL_SMTP_PORT` | smtp | SMTP port (default `587`) |
+| `EMAIL_SMTP_USER` | smtp | SMTP username |
+| `EMAIL_SMTP_PASS` | smtp | SMTP password or app password |
+| `EMAIL_SMTP_SECURE` | smtp | `true` for implicit TLS (port 465) |
+
+Set these in `/etc/gps-verify.env` **on both instances** and restart
+`gps-verify.service`. Requesting a code twice within 30 seconds returns the
+*same* code instead of invalidating the one the user may have just received.
 
 ### Redeploying
 
