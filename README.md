@@ -105,7 +105,10 @@ The live instance runs in **LXC 205** (`gps-verify`) on the Proxmox host, expose
 | `gps-verify.service` | Runs the Express API on port 3001 |
 | `gps-caddy.service` | Caddy reverse proxy, port 80 → 3001 |
 | `tailscaled.service` | Tailscale daemon (userspace networking) |
-| `tailscale-funnel.service` | Re-applies `tailscale funnel --bg 80` on boot |
+| `tailscale-funnel.service` | Applies `tailscale funnel --bg 80` on boot (waits for tailscaled to be *Running*) |
+| `tailscale-funnel-watchdog.timer` | Every 5 min, re-establishes the Funnel if it dropped |
+
+> **Why the funnel unit waits:** systemd's `After=tailscaled.service` only orders the *start* of the tailscaled unit — it does not wait for tailscaled to reach the `Running` backend state. Running `tailscale funnel` too early fails with `unexpected state: NoState`, which takes the public URL offline after a reboot. `deploy/tailscale-funnel-setup.sh` polls `tailscale status --json` until the state is `Running`, then applies and verifies the Funnel. The watchdog timer covers the case where tailscaled restarts on its own.
 
 ### Redeploying
 
@@ -123,6 +126,15 @@ systemctl status gps-verify gps-caddy tailscaled tailscale-funnel
 tailscale funnel status
 curl -s https://gps-verify.tailfd1512.ts.net/api/sites/count
 ```
+
+### Deploy scripts
+
+`deploy/` contains the scripts installed on LXC 205:
+
+| File | Purpose |
+|---|---|
+| `tailscale-funnel-setup.sh` | Waits for tailscaled, then applies + verifies the Funnel |
+| `tailscale-funnel-watchdog.sh` | Re-establishes the Funnel if it is not active |
 
 ---
 
