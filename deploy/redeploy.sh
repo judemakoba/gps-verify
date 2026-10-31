@@ -62,9 +62,9 @@ done
 
 echo "==> installing backend dependencies"
 cd "$APP_DIR/backend"
-if [ ! -d node_modules ]; then
-  npm install --omit=dev --no-audit --no-fund
-fi
+# Always run npm install: a new dependency may have been added since the last
+# deploy, and npm is a no-op when the lockfile is already satisfied.
+npm install --omit=dev --no-audit --no-fund
 
 echo "==> restarting $SERVICE"
 systemctl restart "$SERVICE"
