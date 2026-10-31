@@ -6,7 +6,9 @@
     "start": "cd backend && npm start",
     "install-backend": "cd backend && npm install",
     "build": "node tools/build.js",
-    "icons": "python tools/make_icons.py"
+    "icons": "python tools/make_icons.py",
+    "test": "cd backend && npm test",
+    "test:e2e": "node backend/sync.e2e.js"
   },
   "engines": {
     "node": ">=18"

@@ -182,3 +182,89 @@ Users are managed from the admin panel in the app, or via the `/api/admin/users*
 | App serves an old UI | Run `node tools/build.js` locally, commit `backend/dist/`, then redeploy |
 | Icons missing in the install prompt | Run `python tools/make_icons.py` then `node tools/build.js` |
 | Local `node_modules` errors | `cd backend && rm -rf node_modules && npm install` |
+
+---
+
+## Two-Site Deployment & Cross-Instance Sync
+
+The same repository runs on **two separate Proxmox hosts** (physically different
+locations, both LANs using `192.168.1.0/24` — so inter-site traffic must always
+use Tailscale `100.x` addresses).
+
+| | Site 1 | Site 2 |
+|---|---|---|
+| Proxmox host | `192.168.1.68` (no Tailscale on the host) | `192.168.1.200` / `100.74.36.100` |
+| LXC | `205` — `gps-verify` | `206` — `gps-verify-2` |
+| LAN address | `192.168.1.205` | `192.168.1.206` |
+| Tailscale IP | `100.126.59.49` | `100.100.206.69` |
+| Public URL | `https://gps-verify.tailfd1512.ts.net` | `https://gps-verify-2.tailfd1512.ts.net` |
+| tailscaled mode | userspace | kernel TUN |
+
+### How sync works
+
+Both instances keep their own JSON stores and reconcile them with
+last-write-wins merges (`backend/sync.js`):
+
+| Data | Rule |
+|---|---|
+| users | keyed by email, whole-record LWW on `updatedAt`. A delete is a **soft delete** (tombstone) so it propagates and the account is not resurrected. |
+| audits | append-only union keyed by `id` — no conflicts possible. |
+| sites | whole-document LWW on `sitesMeta.updatedAt` (the seed replaces the whole set atomically). |
+
+Every merge is commutative, associative and idempotent, so the two sites
+converge no matter who pushes first or how often the loop runs. Both sides
+normalise legacy records to the *same* deterministic `updatedAt` (derived from
+`createdAt`, never "now"), so they cannot disagree.
+
+The sync API listens on its **own port (3002)** and is **not** proxied by Caddy
+or Tailscale Funnel — it carries password hashes, so it must only ever be
+reachable over the tailnet or the LAN. Every request must carry the
+`x-sync-secret` header (compared in constant time).
+
+### Sync API
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/sync/state` | `x-sync-secret` | Full local state (users, audits, sites, sitesMeta) |
+| POST | `/api/sync/merge` | `x-sync-secret` | Merge a peer state into the local store, returns the merged state |
+| GET | `/api/sync/health` | `x-sync-secret` | Node id, record counts, peer URL, drive flag |
+
+### Environment variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` | `3001` | Public API port (behind Caddy / Funnel) |
+| `JWT_SECRET` | dev fallback | **Set the same value on both instances** so a session works on either site |
+| `SYNC_PORT` | `3002` | Sync API port (never exposed publicly) |
+| `SYNC_SECRET` | *(unset)* | Shared secret. When unset, sync is disabled entirely — single-instance deployments are unaffected |
+| `SYNC_PEER_URL` | *(unset)* | Base URL of the peer, e.g. `http://100.126.59.49:3002` |
+| `SYNC_INTERVAL_MS` | `60000` | Sync loop interval |
+| `SYNC_NODE_ID` | `gps-verify-<hostname>` | Human-readable node id |
+| `SYNC_DRIVE` | `true` | Whether this instance drives the loop |
+
+Only one instance needs to drive the loop: it pulls the peer state, merges
+locally, pushes the merged state back and merges the reply again, so both sides
+converge even if one is temporarily offline.
+
+```bash
+# Site 2 drives (it can reach the site-1 tailnet IP)
+SYNC_SECRET=...  SYNC_PEER_URL=http://100.126.59.49:3002  SYNC_NODE_ID=gps-verify-2
+# Site 1 only serves
+SYNC_SECRET=...  SYNC_PEER_URL=                        SYNC_NODE_ID=gps-verify
+```
+
+### Tests
+
+```bash
+npm test        # merge semantics (commutativity, idempotency, tombstones)
+npm run test:e2e   # boots two real instances and checks convergence
+```
+
+### Redeploying
+
+```bash
+bash deploy/redeploy.sh     # or the installed /usr/local/sbin/gps-verify-redeploy
+```
+
+The runtime data lives in `/var/lib/gps-verify/data` and `backend/data` is a
+symlink into it, so a redeploy never wipes users or audit history.
