@@ -27,7 +27,7 @@
 | **Audit log** | Every user sees their own history; admins see all users |
 | **CSV export** | Admins download the full audit log as a `.csv` file |
 | **Admin user CRUD** | Add, delete, suspend/reactivate users; reset any user's password |
-| **Forgot password** | 6-digit one-time code, valid 10 minutes (code is shown in the UI for the admin to relay) |
+| **Password resets** | Admin-driven: the administrator resets a user's password from the admin panel; the user signs in with the new one |
 | **PWA** | Installable on Android; app shell works offline after first load |
 
 ### Offline behaviour
@@ -145,8 +145,6 @@ curl -s https://gps-verify.tailfd1512.ts.net/api/sites/count
 | POST | `/api/auth/register` | — | Create an account |
 | POST | `/api/auth/login` | — | `{ username, password }` → `{ token, user }` |
 | GET | `/api/auth/me` | bearer | Current user profile |
-| POST | `/api/auth/forgot-password` | — | `{ email }` → 6-digit OTP |
-| POST | `/api/auth/reset-password` | — | `{ email, code, newPassword }` |
 | GET | `/api/admin/users` | admin | List users |
 | POST | `/api/admin/users` | admin | `{ email, password, role }` — role is `admin` or `user` |
 | DELETE | `/api/admin/users/:id` | admin | Delete a user (primary admin protected) |
@@ -271,41 +269,26 @@ SYNC_SECRET=...  SYNC_PEER_URL=                        SYNC_NODE_ID=gps-verify
 ### Tests
 
 ```bash
-npm test        # merge semantics (commutativity, idempotency, tombstones) + email delivery
-npm run test:e2e   # boots two real instances and checks convergence
+npm test           # merge semantics (commutativity, idempotency, tombstones)
+node sync.e2e.js   # boots two real instances and checks convergence
 ```
 
 ---
 
-## Password Reset by Email
+## Password Reset
 
-`POST /api/auth/forgot-password` issues a 6-digit code that is valid for 10
-minutes. How it reaches the user depends on the configuration:
+There is no self-service password reset. A user who forgets their password
+contacts the administrator, who resets it from the admin panel:
 
-| `EMAIL_PROVIDER` | Behaviour |
-|---|---|
-| `none` (default) | The code is returned in the API response and shown in the app. An admin relays it by phone/WhatsApp. |
-| `resend` | The code is emailed via the Resend HTTP API (no extra dependency). **The code is not returned in the response.** |
-| `smtp` | The code is emailed via any SMTP server (nodemailer). **The code is not returned in the response.** |
+1. Admin panel → **Users** → **Reset Pass** next to the account.
+2. The admin types the new password (min 6 characters); it is hashed with
+   bcrypt and saved immediately.
+3. The user signs in with the new password.
 
-A provider is only used when all of its credentials are present. If a send
-fails, the app falls back to showing the code in the UI and logs the error —
-so a password reset is never blocked by a mail outage.
+The change syncs to the other site on the next sync cycle (≤ 60 s).
 
-| Variable | Used by | Meaning |
-|---|---|---|
-| `EMAIL_PROVIDER` | all | `none`, `resend` or `smtp` |
-| `EMAIL_API_KEY` | resend | Resend API key |
-| `EMAIL_FROM` | resend, smtp | Sender address, e.g. `GPS Verify <no-reply@yourdomain.com>` |
-| `EMAIL_SMTP_HOST` | smtp | SMTP host |
-| `EMAIL_SMTP_PORT` | smtp | SMTP port (default `587`) |
-| `EMAIL_SMTP_USER` | smtp | SMTP username |
-| `EMAIL_SMTP_PASS` | smtp | SMTP password or app password |
-| `EMAIL_SMTP_SECURE` | smtp | `true` for implicit TLS (port 465) |
-
-Set these in `/etc/gps-verify.env` **on both instances** and restart
-`gps-verify.service`. Requesting a code twice within 30 seconds returns the
-*same* code instead of invalidating the one the user may have just received.
+The login screen tells users to ask their administrator, and no reset code is
+ever issued or emailed.
 
 ### Redeploying
 

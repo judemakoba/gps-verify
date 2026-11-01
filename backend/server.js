@@ -9,7 +9,6 @@ import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { mergeState } from './sync.js';
-import { sendOtpEmail, isEmailConfigured, emailConfig } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -104,31 +103,6 @@ function findUser(users, email) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidEmail(e) { return EMAIL_RE.test(String(e || '').trim().toLowerCase()); }
 
-// ── OTP store (in-memory, 10-min expiry) ─────────────────────────────────────
-// Stored in-memory — resets on server restart. On Railway free tier the
-// container is ephemeral so this is fine (admins can also reset passwords).
-const otpStore = new Map(); // key: email, value: { code, expiresAt }
-const OTP_RESEND_GRACE_MS = 30 * 1000; // re-requesting within 30 s keeps the same code
-function generateOTP(email) {
-  const key = email.toLowerCase();
-  const existing = otpStore.get(key);
-  // Do not invalidate a code the user may have just received by email or SMS.
-  if (existing && Date.now() < existing.expiresAt && Date.now() - existing.issuedAt < OTP_RESEND_GRACE_MS) {
-    return existing.code;
-  }
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(key, { code, issuedAt: Date.now(), expiresAt: Date.now() + 10 * 60 * 1000 });
-  return code;
-}
-function verifyOTP(email, code) {
-  const entry = otpStore.get(email.toLowerCase());
-  if (!entry) return false;
-  if (Date.now() > entry.expiresAt) { otpStore.delete(email.toLowerCase()); return false; }
-  if (entry.code !== code) return false;
-  otpStore.delete(email.toLowerCase());
-  return true;
-}
-
 // ── Middleware ────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
@@ -218,69 +192,6 @@ app.get('/api/auth/me', authenticate, (req, res) => {
   const user = users.find(u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'Not found' });
   res.json({ id: user.id, email: user.email, role: user.role, suspended: user.suspended });
-});
-
-// ── POST /api/auth/forgot-password ────────────────────────────────────────────
-// Generates a 6-digit OTP and delivers it by email when an email provider is
-// configured. Without a provider the code is returned in the response so an
-// admin can relay it via WhatsApp/phone/SMS (the original behaviour).
-app.post('/api/auth/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email || !isValidEmail(email))
-    return res.status(400).json({ error: 'Valid email required' });
-
-  const cleanEmail = email.trim().toLowerCase();
-  const users = readUsers();
-  const user = findUser(users, cleanEmail);
-  if (!user || user.deleted)
-    return res.status(404).json({ error: 'No account found with that email' });
-
-  const code = generateOTP(cleanEmail);
-  console.log(`[OTP] ${cleanEmail} -> ${code} (expires in 10 min)`);
-
-  const delivery = await sendOtpEmail({ to: cleanEmail, code });
-  if (delivery.delivered) {
-    console.log(`[OTP] emailed via ${delivery.provider} to ${cleanEmail}`);
-    return res.json({
-      ok: true,
-      delivered: true,
-      message: `A 6-digit reset code was sent to ${cleanEmail}. It expires in 10 minutes. Check your inbox (and spam folder).`,
-    });
-  }
-
-  if (delivery.reason !== 'not-configured') {
-    console.error(`[OTP] email delivery failed (${delivery.reason}: ${delivery.detail || ''}) — falling back to the in-UI code`);
-  }
-  res.json({
-    ok: true,
-    delivered: false,
-    message: `Your 6-digit reset code is: ${code}\nIt expires in 10 minutes. Contact your admin if you did not receive it.`,
-    // No email provider configured (or the send failed): the frontend shows
-    // this so an admin can relay it to the user.
-    code,
-  });
-});
-
-// ── POST /api/auth/reset-password ─────────────────────────────────────────────
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { email, code, newPassword } = req.body;
-  if (!email || !code || !newPassword)
-    return res.status(400).json({ error: 'email, code, and newPassword required' });
-  if (!isValidEmail(email))
-    return res.status(400).json({ error: 'Valid email required' });
-  if (newPassword.length < 6)
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  if (!verifyOTP(email.trim().toLowerCase(), code))
-    return res.status(400).json({ error: 'Invalid or expired code' });
-
-  const users = readUsers();
-  const user = findUser(users, email.trim().toLowerCase());
-  if (!user || user.deleted) return res.status(404).json({ error: 'User not found' });
-
-  user.password = await bcrypt.hash(newPassword, 10);
-  user.updatedAt = nowIso();
-  writeJSON(P.users, users);
-  res.json({ ok: true, message: 'Password updated successfully. You can now log in.' });
 });
 
 // ── GET /api/admin/users ───────────────────────────────────────────────────────

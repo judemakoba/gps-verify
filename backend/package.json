@@ -5,14 +5,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test sync.test.js email.test.js"
+    "test": "node --test sync.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.14",
     "uuid": "^9.0.0"
   }
 }
