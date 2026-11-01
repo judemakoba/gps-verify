@@ -10,9 +10,9 @@
 
 | Username (email) | Password | Role |
 |---|---|---|
-| `makobajude@gmail.com` | `admin123` | admin (primary, protected) |
+| `makobajude@gmail.com` | *rotated on deploy — not stored in the repo* | admin (primary, protected) |
 
-> ⚠️ Change this password immediately. The primary admin account can never be deleted or suspended by another admin — that protection is enforced server-side.
+> ⚠️ The seeded password was `admin123`, which was public in the git history, so it was rotated the moment the instance went live. The current password is held only by the administrator. The primary admin account can never be deleted or suspended by another admin — that protection is enforced server-side.
 
 ---
 
