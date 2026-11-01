@@ -19,7 +19,9 @@
 //   EMAIL_SMTP_PASS  SMTP password / app password (smtp)
 //   EMAIL_SMTP_SECURE true for implicit TLS        (smtp, default false)
 
-const RESET_SUBJECT = 'GPS Verify — your password reset code';
+// Plain ASCII on purpose: some corporate mail scanners and older clients
+// mishandle non-ASCII MIME-encoded subjects.
+const RESET_SUBJECT = 'GPS Verify - your password reset code';
 const RESET_BODY = (code) => `Your GPS Verify password reset code is ${code}.
 
 It expires in 10 minutes. If you did not request this, you can ignore this
