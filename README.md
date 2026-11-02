@@ -298,3 +298,66 @@ bash deploy/redeploy.sh     # or the installed /usr/local/sbin/gps-verify-redepl
 
 The runtime data lives in `/var/lib/gps-verify/data` and `backend/data` is a
 symlink into it, so a redeploy never wipes users or audit history.
+
+---
+
+## Standalone Android app (offline lookup)
+
+`android/` is a separate, **fully offline** native app for field staff who only
+need to resolve a Tower Co ID to a Site ID and Site Name.
+
+| | |
+|---|---|
+| Package | `com.gpsverify.lookup` |
+| Version | 1.0.0 (versionCode 1) |
+| min / target SDK | 21 (Android 5.0) / 34 (Android 14) |
+| Login | **none** |
+| Internet permission | **none** — verified with `aapt dump permissions` |
+| Audit confirmation | not included (this app is a lookup tool only) |
+| Server / sync | none — the site database ships inside the APK |
+
+The 2,965 sites are bundled as `app/src/main/assets/sites.tsv` (76 KB, tab
+separated). Regenerate it whenever `backend/data/sites.json` changes:
+
+```bash
+node android/tools/sync-sites.js
+```
+
+### Building a signed release
+
+```bash
+cd android
+export JAVA_HOME=/path/to/jdk-21
+export ANDROID_HOME=$HOME/Android/Sdk
+./gradlew :app:assembleRelease
+# -> app/build/outputs/apk/release/app-release.apk
+```
+
+Signing material is deliberately **not** in this repository. The build reads
+`android/keystore.properties` (git-ignored):
+
+```properties
+storeFile=/absolute/path/to/gps-verify-release.jks
+storePassword=...
+keyAlias=gps-verify
+keyPassword=...
+```
+
+Keep the `.jks` backed up somewhere private. Whoever holds it can ship an
+update that Android installs over this app on every handset in the field, so
+never publish it.
+
+### Sideloading
+
+1. Copy `gps-verify-android-1.0.0.apk` to the handset.
+2. Tap it and allow **Install unknown apps** for the app doing the install.
+3. Or over USB: `adb install -r gps-verify-android-1.0.0.apk`
+
+Android 8+ shows a "blocked by Play Protect" warning for sideloaded packages —
+choose **Install anyway**. The app requests no permissions at all.
+
+Launcher icons are regenerated with:
+
+```bash
+python android/tools/make_launcher_icons.py
+```

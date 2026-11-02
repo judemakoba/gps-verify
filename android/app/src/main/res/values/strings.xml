@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Verify</string>
+    <string name="header_subtitle">Tower Site Lookup — works offline</string>
+    <string name="offline_badge">OFFLINE</string>
+
+    <string name="towerco_id_label">Tower Co ID</string>
+    <string name="lookup_button">Verify Site</string>
+    <string name="copy_button">Copy site details</string>
+    <string name="browse_button">Browse all sites</string>
+    <string name="copied">Site details copied</string>
+
+    <string name="enter_an_id">Please enter a Tower Co ID.</string>
+    <string name="no_site_found">No site found for Tower Co ID: %1$s</string>
+    <string name="towerco_label">TowerCo ID: %1$s</string>
+    <string name="result_description">Site %1$s, %2$s</string>
+
+    <string name="browse_title">Browse Sites</string>
+    <string name="search_hint">Search by site ID, name or Tower Co ID</string>
+
+    <string name="footer_note">All site records are stored on this device.\nThe app does not use the internet or send data anywhere.</string>
+
+    <plurals name="site_count">
+        <item quantity="one">%d site</item>
+        <item quantity="other">%d sites</item>
+    </plurals>
+</resources>

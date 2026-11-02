@@ -3,3 +3,19 @@ backend/data/audits.json
 .DS_Store
 *.log
 .env
+
+# ── Android ───────────────────────────────────────────────────────────────────
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+
+# Signing material must NEVER be committed: whoever holds the key can ship an
+# update that Android installs over this app on every handset in the field.
+android/keystore.properties
+android/*.jks
+android/*.keystore
+android/icon_preview.png
